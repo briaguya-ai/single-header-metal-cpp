@@ -1,0 +1,52 @@
+name: build
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push To Branches'
+        type: boolean
+jobs:
+  build-single-header-metal-cpp:
+    strategy:
+      matrix:
+        include:
+        - os: macos-12
+          version: macOS12_iOS15
+        - os: macos-13
+          version: macOS13_iOS16
+        - os: macos-13
+          version: macOS13.3_iOS16.4
+        - os: macos-14
+          version: macOS14_iOS17-beta
+        - os: macos-14
+          version: macOS14.2_iOS17.2
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Build Single Header Metal-cpp
+      run: |
+        wget https://developer.apple.com/metal/cpp/files/metal-cpp_${{ matrix.version }}.zip
+        unzip metal-cpp_${{ matrix.version }}.zip
+        cd metal-cpp
+        python ./SingleHeader/MakeSingleHeader.py Foundation/Foundation.hpp QuartzCore/QuartzCore.hpp Metal/Metal.hpp
+    - uses: actions/upload-artifact@v4
+      with:
+        name: metal-cpp_${{ matrix.version }}__single-header
+        path: metal-cpp/SingleHeader/Metal.hpp
+    - name: clone repo
+      uses: actions/checkout@v4
+      with:
+        ref: 'blank-slate'
+    - uses: actions/download-artifact@v4
+      with:
+        name: metal-cpp_${{ matrix.version }}__single-header
+    - name: Push Metal/Metal.hpp to branch
+      if: ${{ inputs.push }}
+      run: |
+        git switch -C metal-cpp_${{ matrix.version }}
+        mkdir Metal
+        mv ./Metal.hpp ./Metal
+        git add ./Metal/Metal.hpp
+        git commit -m "Add generated single header Metal.hpp"
+        git tag ${{ matrix.version }}
+        git push --set-upstream origin metal-cpp_${{ matrix.version }} -f
+        git push -f --tags
